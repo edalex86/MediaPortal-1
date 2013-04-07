@@ -1285,6 +1285,12 @@ namespace MediaPortal.Player
           _mediaInfo = new MediaInfoWrapper(strFile);
         }
 
+        // Detect if the file is video
+        if (MediaInfo != null && MediaInfo.hasVideo)
+        {
+          type = MediaType.Video;
+        }
+
         if ((!playingRemoteUrl && Util.Utils.IsVideo(strFile)) || Util.Utils.IsLiveTv(strFile)) //local video, tv, rtsp
         {
           if (type == MediaType.Unknown)
@@ -1293,10 +1299,13 @@ namespace MediaPortal.Player
             type = MediaType.Video;
           }
 
-          // Refreshrate change done here. Blu-ray player will handle the refresh rate changes by itself
-          if (strFile.IndexOf(@"\BDMV\INDEX.BDMV") == -1)
+          if (type != MediaType.Music)
           {
-            RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType)(int)type);
+            // Refreshrate change done here. Blu-ray player will handle the refresh rate changes by itself
+            if (strFile.IndexOf(@"\BDMV\INDEX.BDMV") == -1)
+            {
+              RefreshRateChanger.AdaptRefreshRate(strFile, (RefreshRateChanger.MediaType) (int) type);
+            }
           }
 
           if (RefreshRateChanger.RefreshRateChangePending)
@@ -1335,6 +1344,10 @@ namespace MediaPortal.Player
             {
               type = MediaType.Music;
             }
+            if (MediaInfo != null && MediaInfo.hasVideo)
+            {
+              type = MediaType.Video;
+            }
             if (BassMusicPlayer.IsDefaultMusicPlayer && BassMusicPlayer.Player.Playing)
             {
               doStop = !BassMusicPlayer.Player.CrossFadingEnabled;
@@ -1351,8 +1364,18 @@ namespace MediaPortal.Player
           }
         }
 
+        if (!playingRemoteUrl && _mediaInfo == null) // MediaInfo can only be used on files (local or SMB)
+        {
+          _mediaInfo = new MediaInfoWrapper(strFile);
+        }
+
+        if (MediaInfo != null && MediaInfo.hasVideo)
+        {
+          type = MediaType.Video;
+        }
+
         Log.Info("g_Player.Play({0} {1})", strFile, type);
-        if (!playingRemoteUrl && Util.Utils.IsVideo(strFile))
+        if (!playingRemoteUrl && Util.Utils.IsVideo(strFile) && type != MediaType.Music)
         {
           if (!Util.Utils.IsRTSP(strFile) && extension != ".ts") // do not play recorded tv with external player
           {

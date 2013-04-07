@@ -1395,9 +1395,9 @@ namespace MediaPortal.Player
 
         if (filterCodec != null && filterCodec._audioRendererFilter != null)
         {
-          //DirectShowUtil.DisconnectAllPins(graphBuilder, filterCodec._audioRendererFilter);
-          //graphBuilder.RemoveFilter(filterCodec._audioRendererFilter);
-          //while (DirectShowUtil.ReleaseComObject(filterCodec._audioRendererFilter) > 0) ;
+          DirectShowUtil.DisconnectAllPins(graphBuilder, filterCodec._audioRendererFilter);
+          graphBuilder.RemoveFilter(filterCodec._audioRendererFilter);
+          while (DirectShowUtil.ReleaseComObject(filterCodec._audioRendererFilter) > 0) ;
           DirectShowUtil.ReleaseComObject(filterCodec._audioRendererFilter);
           filterCodec._audioRendererFilter = null;
           Log.Info("VideoPlayer9: Cleanup AudioRenderer");
