@@ -3578,7 +3578,25 @@ public class MediaPortalApp : D3DApp, IRender
           dlgNotify.TimeOut = message.Param1;
           dlgNotify.DoModal(GUIWindowManager.ActiveWindow);
         }
+        
+        break;
 
+      case GUIMessage.MessageType.GUI_MSG_ADD_REMOVABLE_DRIVE:
+        if (!Utils.IsRemovable(message.Label))
+        {
+          VirtualDirectories.Instance.Movies.AddRemovableDrive(message.Label, message.Label2);
+          VirtualDirectories.Instance.Music.AddRemovableDrive(message.Label, message.Label2);
+          VirtualDirectories.Instance.Pictures.AddRemovableDrive(message.Label, message.Label2);
+        }
+        break;
+
+      case GUIMessage.MessageType.GUI_MSG_REMOVE_REMOVABLE_DRIVE:
+        if (!Utils.IsRemovable(message.Label))
+        {
+          VirtualDirectories.Instance.Movies.Remove(message.Label);
+          VirtualDirectories.Instance.Music.Remove(message.Label);
+          VirtualDirectories.Instance.Pictures.Remove(message.Label);
+        }
         break;
     }
   }

@@ -305,7 +305,7 @@ namespace MediaPortal.GUI.Pictures
     private static string currentFolder = string.Empty;
     private string m_strDirectoryStart = string.Empty;
     private string destinationFolder = string.Empty;
-    private static VirtualDirectory virtualDirectory = new VirtualDirectory();
+    private static VirtualDirectory _virtualDirectory;
     private MapSettings mapSettings = new MapSettings();
     private bool isFileMenuEnabled = false;
     private string fileMenuPinCode = string.Empty;
@@ -344,70 +344,27 @@ namespace MediaPortal.GUI.Pictures
         _playVideosInSlideshows = xmlreader.GetValueAsBool("pictures", "playVideosInSlideshows", false);
         isFileMenuEnabled = xmlreader.GetValueAsBool("filemenu", "enabled", true);
         fileMenuPinCode = Util.Utils.DecryptPin(xmlreader.GetValueAsString("filemenu", "pincode", string.Empty));
-        string strDefault = xmlreader.GetValueAsString("pictures", "default", string.Empty);
-        virtualDirectory.Clear();
-        for (int i = 0; i < VirtualDirectory.MaxSharesCount; i++)
+        //string strDefault = xmlreader.GetValueAsString("pictures", "default", string.Empty);
+        _virtualDirectory = VirtualDirectories.Instance.Pictures;
+        
+        if (currentFolder == string.Empty)
         {
-          string shareName = String.Format("sharename{0}", i);
-          string sharePath = String.Format("sharepath{0}", i);
-          string strPincode = String.Format("pincode{0}", i);
-
-          string shareType = String.Format("sharetype{0}", i);
-          string shareServer = String.Format("shareserver{0}", i);
-          string shareLogin = String.Format("sharelogin{0}", i);
-          string sharePwd = String.Format("sharepassword{0}", i);
-          string sharePort = String.Format("shareport{0}", i);
-          string remoteFolder = String.Format("shareremotepath{0}", i);
-          string shareViewPath = String.Format("shareview{0}", i);
-
-          Share share = new Share();
-          share.Name = xmlreader.GetValueAsString("pictures", shareName, string.Empty);
-          share.Path = xmlreader.GetValueAsString("pictures", sharePath, string.Empty);
-          string pinCode = Util.Utils.DecryptPin(xmlreader.GetValueAsString("pictures", strPincode, string.Empty));
-          if (pinCode != string.Empty)
+          if (_virtualDirectory.DefaultShare != null)
           {
-            share.Pincode = Convert.ToInt32(pinCode);
-          }
-          else
-          {
-            share.Pincode = -1;
-          }
-
-          share.IsFtpShare = xmlreader.GetValueAsBool("pictures", shareType, false);
-          share.FtpServer = xmlreader.GetValueAsString("pictures", shareServer, string.Empty);
-          share.FtpLoginName = xmlreader.GetValueAsString("pictures", shareLogin, string.Empty);
-          share.FtpPassword = xmlreader.GetValueAsString("pictures", sharePwd, string.Empty);
-          share.FtpPort = xmlreader.GetValueAsInt("pictures", sharePort, 21);
-          share.FtpFolder = xmlreader.GetValueAsString("pictures", remoteFolder, "/");
-          share.DefaultLayout = (Layout)xmlreader.GetValueAsInt("pictures", shareViewPath, (int)Layout.List);
-
-          if (share.Name.Length > 0)
-          {
-            if (strDefault == share.Name)
+            if (_virtualDirectory.DefaultShare.IsFtpShare)
             {
-              share.Default = true;
-              if (currentFolder.Length == 0)
-              {
-                if (share.IsFtpShare)
-                {
-                  //remote:hostname?port?login?password?folder
-                  currentFolder = virtualDirectory.GetShareRemoteURL(share);
-                  m_strDirectoryStart = currentFolder;
-                }
-                else
-                {
-                  currentFolder = share.Path;
-                  m_strDirectoryStart = share.Path;
-                }
-              }
+              //remote:hostname?port?login?password?folder
+              currentFolder = _virtualDirectory.GetShareRemoteURL(_virtualDirectory.DefaultShare);
+              m_strDirectoryStart = currentFolder;
             }
-            virtualDirectory.Add(share);
-          }
-          else
-          {
-            break;
+            else
+            {
+              currentFolder = _virtualDirectory.DefaultShare.Path;
+              m_strDirectoryStart = _virtualDirectory.DefaultShare.Path;
+            }
           }
         }
+
         if (xmlreader.GetValueAsBool("pictures", "rememberlastfolder", false))
         {
           string lastFolder = xmlreader.GetValueAsString("pictures", "lastfolder", currentFolder);
@@ -467,16 +424,17 @@ namespace MediaPortal.GUI.Pictures
     public override void OnAdded()
     {
       base.OnAdded();
-      virtualDirectory.AddDrives();
-      virtualDirectory.SetExtensions(Util.Utils.PictureExtensions);
+      LoadSettings();
+      _virtualDirectory.AddDrives();
+      _virtualDirectory.SetExtensions(Util.Utils.PictureExtensions);
       currentFolder = string.Empty;
       destinationFolder = string.Empty;
       thumbCreationPaths.Clear();
-      LoadSettings();
+      
       if (_enableVideoPlayback)
       {
         foreach (string ext in Util.Utils.VideoExtensions)
-          virtualDirectory.AddExtension(ext);
+          _virtualDirectory.AddExtension(ext);
       }
       GUIWindowManager.Receivers += new SendMessageHandler(GUIWindowManager_OnNewMessage);
     }
@@ -531,16 +489,18 @@ namespace MediaPortal.GUI.Pictures
 
     protected override void OnPageLoad()
     {
+      base.OnPageLoad();
+
       using (Profile.Settings xmlreader = new Profile.MPSettings())
       {
         _tempLeaveThumbsInFolder = xmlreader.GetValueAsBool("thumbnails", "tvrecordedsharepreview", false);
         xmlreader.SetValueAsBool("thumbnails", "tvrecordedsharepreview", false);
       }
+
       if (!KeepVirtualDirectory(PreviousWindowId))
       {
-        virtualDirectory.Reset();
+        _virtualDirectory.Reset();
       }
-      base.OnPageLoad();
       InitViewSelections();
       UpdateButtonStates();
 
@@ -684,7 +644,7 @@ namespace MediaPortal.GUI.Pictures
             currentFolder = message.Label;
             if (!Util.Utils.IsRemovable(message.Label))
             {
-              virtualDirectory.AddRemovableDrive(message.Label, message.Label2);
+              _virtualDirectory.AddRemovableDrive(message.Label, message.Label2);
             }
           }
           LoadDirectory(currentFolder);
@@ -693,7 +653,7 @@ namespace MediaPortal.GUI.Pictures
         case GUIMessage.MessageType.GUI_MSG_REMOVE_REMOVABLE_DRIVE:
           if (!Util.Utils.IsRemovable(message.Label))
           {
-            virtualDirectory.Remove(message.Label);
+            _virtualDirectory.Remove(message.Label);
           }
           if (currentFolder.Contains(message.Label))
           {
@@ -803,7 +763,7 @@ namespace MediaPortal.GUI.Pictures
       }
       dlg.AddLocalizedString(457); //Switch View
       int iPincodeCorrect;
-      if (!virtualDirectory.IsProtectedShare(item.Path, out iPincodeCorrect) && !item.IsRemote && isFileMenuEnabled)
+      if (!_virtualDirectory.IsProtectedShare(item.Path, out iPincodeCorrect) && !item.IsRemote && isFileMenuEnabled)
       {
         dlg.AddLocalizedString(500); // FileMenu      
       }
@@ -1062,7 +1022,7 @@ namespace MediaPortal.GUI.Pictures
       }
       else
       {
-        Share share = virtualDirectory.GetShare(folderName);
+        Share share = _virtualDirectory.GetShare(folderName);
         if (share != null)
         {
           if (mapSettings == null)
@@ -1262,7 +1222,7 @@ namespace MediaPortal.GUI.Pictures
         if (item.Label != "..")
         {
           int pin;
-          if (!virtualDirectory.IsProtectedShare(item.Path, out pin))
+          if (!_virtualDirectory.IsProtectedShare(item.Path, out pin))
           {
             Util.Utils.SetThumbnails(ref item);
           }
@@ -1321,7 +1281,7 @@ namespace MediaPortal.GUI.Pictures
         if (item.Label != "..")
         {
           List<GUIListItem> items = new List<GUIListItem>();
-          items = virtualDirectory.GetDirectoryUnProtectedExt(item.Path, false);
+          items = _virtualDirectory.GetDirectoryUnProtectedExt(item.Path, false);
           foreach (GUIListItem subItem in items)
           {
             DoDeleteItem(subItem);
@@ -1337,7 +1297,7 @@ namespace MediaPortal.GUI.Pictures
 
     protected override void OnInfo(int itemNumber)
     {
-      if (virtualDirectory.IsRemote(currentFolder))
+      if (_virtualDirectory.IsRemote(currentFolder))
       {
         return;
       }
@@ -1452,15 +1412,15 @@ namespace MediaPortal.GUI.Pictures
       }
       else
       {
-        if (virtualDirectory.IsRemote(item.Path))
+        if (_virtualDirectory.IsRemote(item.Path))
         {
-          if (!virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
+          if (!_virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
           {
-            if (!virtualDirectory.ShouldWeDownloadFile(item.Path))
+            if (!_virtualDirectory.ShouldWeDownloadFile(item.Path))
             {
               return;
             }
-            if (!virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
+            if (!_virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
             {
               //show message that we are unable to download the file
               GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SHOW_WARNING, 0, 0, 0, 0, 0, 0);
@@ -1495,15 +1455,15 @@ namespace MediaPortal.GUI.Pictures
       }
       else
       {
-        if (virtualDirectory.IsRemote(item.Path))
+        if (_virtualDirectory.IsRemote(item.Path))
         {
-          if (!virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
+          if (!_virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
           {
-            if (!virtualDirectory.ShouldWeDownloadFile(item.Path))
+            if (!_virtualDirectory.ShouldWeDownloadFile(item.Path))
             {
               return;
             }
-            if (!virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
+            if (!_virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
             {
               //show message that we are unable to download the file
               GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SHOW_WARNING, 0, 0, 0, 0, 0, 0);
@@ -1547,15 +1507,15 @@ namespace MediaPortal.GUI.Pictures
       }
       else
       {
-        if (virtualDirectory.IsRemote(item.Path))
+        if (_virtualDirectory.IsRemote(item.Path))
         {
-          if (!virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
+          if (!_virtualDirectory.IsRemoteFileDownloaded(item.Path, item.FileInfo.Length))
           {
-            if (!virtualDirectory.ShouldWeDownloadFile(item.Path))
+            if (!_virtualDirectory.ShouldWeDownloadFile(item.Path))
             {
               return;
             }
-            if (!virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
+            if (!_virtualDirectory.DownloadRemoteFile(item.Path, item.FileInfo.Length))
             {
               //show message that we are unable to download the file
               GUIMessage msg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_SHOW_WARNING, 0, 0, 0, 0, 0, 0);
@@ -1602,14 +1562,14 @@ namespace MediaPortal.GUI.Pictures
       }
       if (SlideShow.Count > 0)
       {
-        GUIWindowManager.ActivateWindow((int)Window.WINDOW_SLIDESHOW);
-        SlideShow.Select(strFile);
+          GUIWindowManager.ActivateWindow((int)Window.WINDOW_SLIDESHOW);
+          SlideShow.Select(strFile);
       }
     }
 
     public void AddDir(GUISlideShow SlideShow, string strDir)
     {
-      List<GUIListItem> itemlist = virtualDirectory.GetDirectoryExt(strDir);
+      List<GUIListItem> itemlist = _virtualDirectory.GetDirectoryExt(strDir);
       itemlist.Sort(new PictureSort(CurrentSortMethod, CurrentSortAsc));
       Filter(ref itemlist);
       foreach (GUIListItem item in itemlist)
@@ -1812,7 +1772,7 @@ namespace MediaPortal.GUI.Pictures
       dlgFile.SetSourceItem(item);
       dlgFile.SetSourceDir(currentFolder);
       dlgFile.SetDestinationDir(destinationFolder);
-      dlgFile.SetDirectoryStructure(virtualDirectory);
+      dlgFile.SetDirectoryStructure(_virtualDirectory);
       dlgFile.DoModal(GetID);
       destinationFolder = dlgFile.GetDestinationDir();
 
@@ -1909,7 +1869,7 @@ namespace MediaPortal.GUI.Pictures
 
       if (disp == Display.Files)
       {
-        itemlist = virtualDirectory.GetDirectoryExt(currentFolder);
+        itemlist = _virtualDirectory.GetDirectoryExt(currentFolder);
         Filter(ref itemlist);
         MissingThumbCacher ThumbWorker = new MissingThumbCacher(currentFolder, _autocreateLargeThumbs, false);
         // int itemIndex = 0;
@@ -2195,28 +2155,28 @@ namespace MediaPortal.GUI.Pictures
 
     public static void ResetShares()
     {
-      virtualDirectory.Reset();
-      virtualDirectory.DefaultShare = null;
-      virtualDirectory.LoadSettings("pictures");
+      _virtualDirectory.Reset();
+      _virtualDirectory.DefaultShare = null;
+      _virtualDirectory.LoadSettings("pictures");
 
-      if (virtualDirectory.DefaultShare != null)
+      if (_virtualDirectory.DefaultShare != null)
       {
         int pincode;
-        bool folderPinProtected = virtualDirectory.IsProtectedShare(virtualDirectory.DefaultShare.Path, out pincode);
+        bool folderPinProtected = _virtualDirectory.IsProtectedShare(_virtualDirectory.DefaultShare.Path, out pincode);
         if (folderPinProtected)
         {
           currentFolder = string.Empty;
         }
         else
         {
-          currentFolder = virtualDirectory.DefaultShare.Path;
+          currentFolder = _virtualDirectory.DefaultShare.Path;
         }
       }
     }
 
     public static void ResetExtensions(ArrayList extensions)
     {
-      virtualDirectory.SetExtensions(extensions);
+      _virtualDirectory.SetExtensions(extensions);
     }
 
     #endregion
