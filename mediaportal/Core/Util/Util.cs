@@ -1380,6 +1380,17 @@ namespace MediaPortal.Util
       return false;
     }
 
+    public static bool IsUsbHdd(string strFile)
+    {
+      if (strFile == null) return false;
+      if (strFile.Length < 2) return false;
+      List<string> usbHdds = new List<string>();
+      usbHdds = GetAvailableUsbHardDisks();
+      string strDrive = strFile.Substring(0, 2);
+      if (usbHdds.Contains(strDrive)) return true;
+      return false;
+    }
+
     // Check if filename is from mounted ISO image
     public static bool IsISOImage(string fileName)
     {
