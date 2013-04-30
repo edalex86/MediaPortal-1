@@ -81,11 +81,11 @@ namespace TvLibrary.Implementations.DVB
           // minor_channel_number. Since MP currently doesn't support
           // storing or zapping with such numbers, we use an
           // easy-to-remember convention...
-          info.LCN = (info.majorChannel * 1000) + info.minorChannel;
+          atscChannel.LogicalChannelNumber = (info.majorChannel * 1000) + info.minorChannel;
         }
         else
         {
-          info.LCN = tuningChannel.PhysicalChannel * 1000 + info.serviceID;
+          atscChannel.LogicalChannelNumber = (tuningChannel.PhysicalChannel * 1000) + info.serviceID;
         }
       }
       atscChannel.Provider = info.service_provider_name;
