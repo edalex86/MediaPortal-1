@@ -71,7 +71,23 @@ namespace TvLibrary.Implementations.DVB
       ATSCChannel tuningChannel = (ATSCChannel)channel;
       ATSCChannel atscChannel = new ATSCChannel();
       atscChannel.Name = info.service_name;
-      atscChannel.LogicalChannelNumber = info.LCN;
+      if (info.LCN == 0 || info.LCN == 10000)
+      {
+        // logical channel number not found/assigned
+        if (info.majorChannel > 0 && info.minorChannel > 0)
+        {
+          // ATSC two part channel number available. See ATSC A/65 section
+          // 6.3.1 and 6.3.2, notes on major_channel_number and
+          // minor_channel_number. Since MP currently doesn't support
+          // storing or zapping with such numbers, we use an
+          // easy-to-remember convention...
+          info.LCN = (info.majorChannel * 1000) + info.minorChannel;
+        }
+        else
+        {
+          info.LCN = tuningChannel.PhysicalChannel * 1000 + info.serviceID;
+        }
+      }
       atscChannel.Provider = info.service_provider_name;
       atscChannel.ModulationType = tuningChannel.ModulationType;
       atscChannel.Frequency = tuningChannel.Frequency;
@@ -91,20 +107,14 @@ namespace TvLibrary.Implementations.DVB
 
     protected override void SetNameForUnknownChannel(IChannel channel, ChannelInfo info)
     {
-      if (((ATSCChannel)channel).Frequency > 0)
+      ATSCChannel atscChannel = channel as ATSCChannel;
+      if (channel == null)
       {
-        Log.Log.Info("DVBBaseScanning: service_name is null so now = Unknown {0}-{1}",
-                     ((ATSCChannel)channel).Frequency, info.serviceID);
-        info.service_name = String.Format("Unknown {0}-{1:X}", ((ATSCChannel)channel).Frequency,
-                                          info.serviceID);
+        return;
       }
-      else
-      {
-        Log.Log.Info("DVBBaseScanning: service_name is null so now = Unknown {0}-{1}",
-                     ((ATSCChannel)channel).PhysicalChannel, info.serviceID);
-        info.service_name = String.Format("Unknown {0}-{1:X}", ((ATSCChannel)channel).PhysicalChannel,
-                                          info.serviceID);
-      }
+
+      info.service_name = String.Format("Unknown {0}-{1}", atscChannel.PhysicalChannel, info.serviceID);
+      Log.Log.Info("ATSCScanning: channel name is not available, now assigned \"{0}\"", info.service_name);
     }
 
     protected override bool IsRadioService(int serviceType)
