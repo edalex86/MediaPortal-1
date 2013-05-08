@@ -482,7 +482,11 @@ namespace MediaPortal.GUI.Music
           item.OnRetrieveArt += new GUIListItem.RetrieveCoverArtHandler(OnRetrieveCoverArt);
           item.OnItemSelected += new GUIListItem.ItemSelectedHandler(item_OnItemSelected);
 
-          facadeLayout.Add(item);
+          // Do not add item to list (Music files correctly tagged or bad audio/video files)
+          if ((tag != null) || (item.Label == ".." || item.IsFolder))
+          {
+            facadeLayout.Add(item);
+          }
         }
 
         int iTotalItems = facadeLayout.Count;
