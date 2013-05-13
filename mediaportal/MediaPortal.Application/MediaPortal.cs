@@ -1486,7 +1486,13 @@ public class MediaPortalApp : D3D, IRender
       g_Player.WndProc(ref msg);
 
       // forward message to form class
-      base.WndProc(ref msg);
+      try
+      {
+        base.WndProc(ref msg);
+      }
+      catch
+      {
+      }
     }
 
     catch (Exception ex)
@@ -2823,7 +2829,6 @@ public class MediaPortalApp : D3D, IRender
     }
   }
 
-
   /// <summary>
   /// 
   /// </summary>
@@ -2837,7 +2842,14 @@ public class MediaPortalApp : D3D, IRender
       Log.Debug("Main: Form not created yet - ignoring Event");
       return;
     }
+
+    // Playback keeps rolling successfully if you wait until *after* device
+    // reset to re-allocate resources. Seems a little counter-intuitive, but this
+    // is the way it works!
+    GUIWindowManager.OnDeviceLost();
+    AppActive = false;
     GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.LOST;
+
     base.OnDeviceLost(sender, e);
   }
 
@@ -2864,6 +2876,7 @@ public class MediaPortalApp : D3D, IRender
       return;
     }
 
+    // Reload all resources.
     int activeWin = GUIWindowManager.ActiveWindow;
     if (activeWin == 0 && !GUIWindowManager.HasPreviousWindow())
     {
@@ -2882,23 +2895,32 @@ public class MediaPortalApp : D3D, IRender
     GUIWindowManager.Dispose();
     GUIFontManager.Dispose();
     GUITextureManager.Dispose();
-    GUIGraphicsContext.DX9Device.EvictManagedResources();
-
-    GUIGraphicsContext.Load();
-    GUITextureManager.Init();
-    GUIFontManager.LoadFonts(GUIGraphicsContext.GetThemedSkinFile(@"\fonts.xml"));
-    GUIFontManager.InitializeDeviceObjects();
+    try
+    {
+      GUIGraphicsContext.DX9Device.EvictManagedResources();
+    }
+    catch
+    {
+      Log.Warn("Main: Failed to evict managed resources");
+    }
 
     if (GUIGraphicsContext.DX9Device != null)
     {
+      GUIGraphicsContext.Load();
+      GUITextureManager.Init();
+      GUIFontManager.SetDevice();
+      GUIFontManager.LoadFonts(GUIGraphicsContext.GetThemedSkinFile(@"\fonts.xml"));
+      GUIFontManager.InitializeDeviceObjects();
+
       GUIWindowManager.PreInit();
       GUIWindowManager.ActivateWindow(activeWin);
       GUIWindowManager.OnDeviceRestored();
 
-      // Device reset has been done for us. We're up and running again.
+      // Device reset is done and we're up and running again.
+      AppActive = true;
       GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.RUNNING;
+      base.OnDeviceReset(sender, e);
     }
-    GUIFontManager.SetDevice();
   }
 
   #endregion

@@ -470,8 +470,9 @@ namespace MediaPortal
     {
       Log.Debug("Main: RecreateSwapChain()");
 
-      // stop plaback if we are using a a D3D9 device and the device is not lost, meaning we are toggling between fullscreen and windowed mode
-      if (!GUIGraphicsContext.IsDirectX9ExUsed() && g_Player.Playing && !RefreshRateChanger.RefreshRateChangePending)
+      // Stop plaback if we are using a a D3D9 device and the device is not lost (usually
+      // means we are toggling between fullscreen and windowed mode).
+      if (!GUIGraphicsContext.IsDirectX9ExUsed() && GUIGraphicsContext.CurrentState != GUIGraphicsContext.State.LOST && g_Player.Playing && !RefreshRateChanger.RefreshRateChangePending)
       {
         g_Player.Stop();
         while (GUIGraphicsContext.IsPlaying)
@@ -480,26 +481,30 @@ namespace MediaPortal
         }
       }
 
-      // halt rendering
-      AppActive = false;
-      int activeWin = GUIWindowManager.ActiveWindow;
+      // Invoke callback to warn that the device is about to be lost.
+      OnDeviceLost(null, null);
 
-      // stop window manager and dispose resources
-      GUIWindowManager.UnRoute();
-      GUIWindowManager.Dispose();
-      GUIFontManager.Dispose();
-      GUITextureManager.Dispose();
-      GUIGraphicsContext.DX9Device.EvictManagedResources();
-
-      // build new D3D presentation parameters and reset device
+      // Build new D3D presentation parameters.
       BuildPresentParams(Windowed);
       try
       {
+        // Attempt to reset.
         GUIGraphicsContext.DX9Device.Reset(_presentParams);
+        // Invoke callback to inform that the device was successfully reset.
+        OnDeviceReset(null, null);
       }
       catch (InvalidCallException)
       {
         Log.Error("D3D: D3DERR_INVALIDCALL - presentation parameters might contain an invalid value");
+        // Sometimes it is not possible to successfully reset without stopping playback.
+        if (g_Player.Playing)
+        {
+          g_Player.Stop();
+          while (GUIGraphicsContext.IsPlaying)
+          {
+            Thread.Sleep(100);
+          }
+        }
       }
       catch (DeviceLostException)
       {
@@ -517,23 +522,6 @@ namespace MediaPortal
       {
         Log.Error("D3D: D3DERR_OUTOFMEMORY - could not allocate sufficient memory to complete the call");
       }
-
-      // load resources
-      GUIGraphicsContext.Load();
-      GUITextureManager.Init();
-      GUIFontManager.LoadFonts(GUIGraphicsContext.GetThemedSkinFile(@"\fonts.xml"));
-      GUIFontManager.InitializeDeviceObjects();
-
-      // restart window manager
-      GUIWindowManager.PreInit();
-      GUIWindowManager.ActivateWindow(activeWin);
-      GUIWindowManager.OnDeviceRestored();
-
-      // set new device for font manager
-      GUIFontManager.SetDevice();
-
-      // continue rendering
-      AppActive = true;
     }
 
 
@@ -653,8 +641,6 @@ namespace MediaPortal
 
       // lock rendering loop and recreate the backbuffer for the current D3D device
       RecreateSwapChain();
-
-      GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.RUNNING;
 
       // enable handlers
       GUIGraphicsContext.DX9Device.DeviceLost += OnDeviceLost;
