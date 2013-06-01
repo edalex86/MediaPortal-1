@@ -162,14 +162,24 @@ namespace TvPlugin
     protected override void OnPageDestroy(int newWindowId)
     {
       base.OnPageDestroy(newWindowId);
-      listRecordings.Clear();
-      listRecordings = null;
+      if (TVHome.Connected)
+      {
+        listRecordings.Clear();
+        listRecordings = null;
+      }
       if (!GUIGraphicsContext.IsTvWindow(newWindowId)) {}
     }
 
     protected override void OnPageLoad()
     {
       TVHome.WaitForGentleConnection();
+
+      if (!TVHome.Connected)
+      {
+        RemoteControl.Clear();
+        GUIWindowManager.ActivateWindow((int)Window.WINDOW_SETTINGS_TVENGINE);
+        return;
+      }
 
       base.OnPageLoad();
       listRecordings = Schedule.ListAll();

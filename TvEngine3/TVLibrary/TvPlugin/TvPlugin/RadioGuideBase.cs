@@ -660,7 +660,14 @@ namespace TvPlugin
 
           case GUIMessage.MessageType.GUI_MSG_WINDOW_INIT:
             {              
-              TVHome.WaitForGentleConnection();        
+              TVHome.WaitForGentleConnection();
+
+              if (!TVHome.Connected)
+              {
+                RemoteControl.Clear();
+                GUIWindowManager.ActivateWindow((int)Window.WINDOW_SETTINGS_TVENGINE);
+                return false;
+              }
       
               GUIPropertyManager.SetProperty("#itemcount", string.Empty);
               GUIPropertyManager.SetProperty("#selecteditem", string.Empty);

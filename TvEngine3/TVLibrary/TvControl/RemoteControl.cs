@@ -303,27 +303,29 @@ namespace TvControl
     private static bool CheckTcpPort()
     {
       Stopwatch benchClock = Stopwatch.StartNew();
-
-      TcpClient tcpClient = new TcpClient();
-
-      try
+      using (TcpClient tcpClient = new TcpClient())
       {
-        IAsyncResult result = tcpClient.BeginConnect(
-          _hostName,
-          REMOTING_PORT, ConnectCallback,
-          tcpClient);
+        IAsyncResult result = tcpClient.BeginConnect(_hostName, REMOTING_PORT, ConnectCallback, tcpClient);
+        try
+        {
+          if (!result.AsyncWaitHandle.WaitOne(MAX_TCP_TIMEOUT, true))
+          {
+            tcpClient.Close();
+            return _isRemotingConnected = false;
+          }
 
-        _isRemotingConnected = result.AsyncWaitHandle.WaitOne(MAX_TCP_TIMEOUT, true);
-        return _isRemotingConnected;
-      }
-      catch (Exception)
-      {
-        return false;
-      }
-      finally
-      {
-        benchClock.Stop();
-        Log.Debug("TCP connect took : {0}", benchClock.ElapsedMilliseconds);
+          tcpClient.EndConnect(result);
+        }
+        catch (Exception ex)
+        {
+          return _isRemotingConnected = false;
+        }
+        finally
+        {
+          benchClock.Stop();
+          Log.Debug("TCP connect took : {0}", benchClock.ElapsedMilliseconds);
+        }
+        return _isRemotingConnected = true;
       }
     }
 

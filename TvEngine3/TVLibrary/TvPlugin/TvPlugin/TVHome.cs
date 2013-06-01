@@ -459,19 +459,16 @@ namespace TvPlugin
 
       if (!Connected)
       {
-        if (!_onPageLoadDone)
-        {
-          RemoteControl.Clear();
-          GUIWindowManager.ActivateWindow((int)Window.WINDOW_SETTINGS_TVENGINE);
-          return;
-        }
-        else
-        {
-          UpdateStateOfRecButton();
-          UpdateProgressPercentageBar();
-          UpdateRecordingIndicator();
-          return;
-        }
+        RemoteControl.Clear();
+        GUIWindowManager.ActivateWindow((int) Window.WINDOW_SETTINGS_TVENGINE);
+        return;
+      }
+      else if (_onPageLoadDone)
+      {
+        UpdateStateOfRecButton();
+        UpdateProgressPercentageBar();
+        UpdateRecordingIndicator();
+        return;
       }
 
       try
@@ -1361,7 +1358,7 @@ namespace TvPlugin
       {
         _recoverTV = false;
         GUIMessage initMsg = null;
-        initMsg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_WINDOW_INIT, (int)Window.WINDOW_TV_OVERLAY, 0, 0, 0, 0,
+        initMsg = new GUIMessage(GUIMessage.MessageType.GUI_MSG_WINDOW_INIT, (int) Window.WINDOW_TV_OVERLAY, 0, 0, 0, 0,
                                  null);
         GUIWindowManager.SendThreadMessage(initMsg);
       }
@@ -1392,6 +1389,7 @@ namespace TvPlugin
 
     private void HeartBeatTransmitter()
     {
+      RemoteControl.Clear();
       int countToHBLoop = 5;
 
       while (true)

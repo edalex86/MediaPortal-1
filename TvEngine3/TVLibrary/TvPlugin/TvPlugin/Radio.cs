@@ -254,6 +254,14 @@ namespace TvPlugin
     protected override void OnPageLoad()
     {
       Log.Info("RadioHome:OnPageLoad");
+
+      if (!TVHome.Connected)
+      {
+        RemoteControl.Clear();
+        GUIWindowManager.ActivateWindow((int)Window.WINDOW_SETTINGS_TVENGINE);
+        return;
+      }
+
       base.OnPageLoad();
       GUIMessage msgStopRecorder = new GUIMessage(GUIMessage.MessageType.GUI_MSG_RECORDER_STOP, 0, 0, 0, 0, 0, null);
       GUIWindowManager.SendMessage(msgStopRecorder);      
@@ -291,6 +299,10 @@ namespace TvPlugin
 
     private static void LoadChannelGroups()
     {
+      if (!TVHome.Connected)
+      {
+        return;
+      }
       Settings xmlreader = new MPSettings();
       string currentchannelName = xmlreader.GetValueAsString("myradio", "channel", String.Empty);
 
