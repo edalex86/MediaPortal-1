@@ -677,7 +677,7 @@ namespace TvPlugin
         }
 
         // turn tv on/off        
-        if (Navigator.Channel.IsTv)
+        if (Navigator.Channel != null && Navigator.Channel.IsTv)
         {
           ViewChannelAndCheck(Navigator.Channel);
         }
