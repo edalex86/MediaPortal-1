@@ -153,6 +153,7 @@ namespace MediaPortal.Util
     private static HashSet<string> m_ImageExtensions = new HashSet<string>();
 
     private static string[] _artistNamePrefixes;
+    protected static string _artistPrefixes;
     
     private static bool m_bHideExtensions = false;
     private static bool enableGuiSounds;
@@ -213,6 +214,7 @@ namespace MediaPortal.Util
         m_bHideExtensions = xmlreader.GetValueAsBool("gui", "hideextensions", true);
         string artistNamePrefixes = xmlreader.GetValueAsString("musicfiles", "artistprefixes", "The, Les, Die");
         _artistNamePrefixes = artistNamePrefixes.Split(',');
+        _artistPrefixes = xmlreader.GetValueAsString("musicfiles", "artistprefixes", "The, Les, Die");
 
         string strTmp = xmlreader.GetValueAsString("music", "extensions", AudioExtensionsDefault);
         Tokens tok = new Tokens(strTmp, new[] {','});
@@ -694,10 +696,10 @@ namespace MediaPortal.Util
         }
 
         string[] thumbs = {
+                            Util.Utils.GetVideosThumbPathname(item.Path),
                             Path.ChangeExtension(item.Path, ".jpg"),
                             Path.ChangeExtension(item.Path, ".tbn"),
-                            Path.ChangeExtension(item.Path, ".png"),
-                            Util.Utils.GetVideosThumbPathname(item.Path)
+                            Path.ChangeExtension(item.Path, ".png")
                           };
 
         bool foundVideoThumb = false;
@@ -796,6 +798,7 @@ namespace MediaPortal.Util
         if (FileExistsInCache(strThumb) && strThumb != item.ThumbnailImage)
         {
           item.ThumbnailImage = strThumb;
+          item.IconImageBig = strThumb;
         }
       }
     }
@@ -1400,6 +1403,28 @@ namespace MediaPortal.Util
       return false;
     }
 
+    public static bool IsUsbHdd(string path)
+    {
+      if (path == null) return false;
+      if (path.Length < 2) return false;
+      List<string> usbHdds = new List<string>();
+      usbHdds = GetAvailableUsbHardDisks();
+      string strDrive = path.Substring(0, 2);
+      if (usbHdds.Contains(strDrive)) return true;
+      return false;
+    }
+
+    public static bool IsRemovableUsbDisk(string path)
+    {
+      if (path == null) return false;
+      if (path.Length < 2) return false;
+      List<string> usbDisks = new List<string>();
+      usbDisks = GetRemovableUsbDisks();
+      string strDrive = path.Substring(0, 2);
+      if (usbDisks.Contains(strDrive)) return true;
+      return false;
+    }
+
     // Check if filename is from mounted ISO image
     public static bool IsISOImage(string fileName)
     {
@@ -1732,7 +1757,12 @@ namespace MediaPortal.Util
 
     public static void EjectCDROM()
     {
-      mciSendString("set cdaudio door open", null, 0, IntPtr.Zero);
+      EjectCDROM(string.Empty);
+    }
+    
+    public static void CloseCDROM(string driveLetter)
+    {
+      mciSendString(string.Format("set CDAudio!{0} door closed", driveLetter), null, 127, IntPtr.Zero);
     }
 
     public static Process StartProcess(ProcessStartInfo procStartInfo, bool bWaitForExit)
@@ -3436,6 +3466,45 @@ namespace MediaPortal.Util
       }
     }
 
+    /// <summary>
+    /// taken from audioscrobbler plugin code to reverse where prefix has been swapped 
+    /// eg. The Beatles => Beatles, The or Die Toten Hosen => Toten Hosen ,Die
+    /// and will change back to the artist name
+    /// </summary>
+    /// <param name="aStrippedArtist">Value stored in database with prefix at the end</param>
+    /// <returns>What should be actual string in tag</returns>
+    public static string UndoArtistPrefix(string aStrippedArtist)
+    {
+      try
+      {
+        string[] allPrefixes = null;
+        allPrefixes = _artistPrefixes.Split(',');
+        if (allPrefixes.Length > 0)
+        {
+          for (int i = 0; i < allPrefixes.Length; i++)
+          {
+            string cpyPrefix = allPrefixes[i];
+            if (!aStrippedArtist.ToLowerInvariant().EndsWith(cpyPrefix.ToLowerInvariant())) continue;
+            // strip the separating "," as well
+            int prefixPos = aStrippedArtist.IndexOf(',');
+            if (prefixPos <= 0) continue;
+            aStrippedArtist = aStrippedArtist.Remove(prefixPos);
+            cpyPrefix = cpyPrefix.Trim(new char[] { ' ', ',' });
+            aStrippedArtist = cpyPrefix + " " + aStrippedArtist;
+            // abort here since artists should only have one prefix stripped
+            return aStrippedArtist;
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.Error("An error occured undoing prefix strip for artist: {0} - {1}", aStrippedArtist,
+                  ex.Message);
+      }
+
+      return aStrippedArtist;
+    }
+
     private static void AddWatcher(string dir, int buffersize)
     {
       AddWatcher(dir);
@@ -4968,6 +5037,94 @@ namespace MediaPortal.Util
         return true;
       }
       return false;
+    }
+
+    /// <summary>
+    /// Returns connected USB hard disk drives letters
+    /// Works only from Vista and above
+    /// </summary>
+    /// <returns></returns>
+    public static List<string> GetAvailableUsbHardDisks()
+    {
+      List<string> disks = new List<string>();
+      
+      try
+      {
+        // browse all USB WMI physical disks
+        foreach (ManagementObject drive in
+          new ManagementObjectSearcher(
+            "select DeviceID, Model from Win32_DiskDrive where InterfaceType='USB' AND MediaType LIKE '%hard disk%'").
+            Get())
+        {
+          // associate physical disks with partitions
+          ManagementObject partition = new ManagementObjectSearcher(String.Format(
+            "associators of {{Win32_DiskDrive.DeviceID='{0}'}} where AssocClass = Win32_DiskDriveToDiskPartition",
+            drive["DeviceID"])).First();
+
+          if (partition != null)
+          {
+            // associate partitions with logical disks (drive letter volumes)
+            ManagementObject logical = new ManagementObjectSearcher(String.Format(
+              "associators of {{Win32_DiskPartition.DeviceID='{0}'}} where AssocClass = Win32_LogicalDiskToPartition",
+              partition["DeviceID"])).First();
+
+            if (logical != null)
+            {
+              disks.Add(logical["Name"].ToString());
+            }
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.Error("Utils: GetUsbHardDisks Error: {0}", ex.Message);
+      }
+
+      return disks;
+    }
+
+    /// <summary>
+    /// Returns connected USB removable disk drives letters
+    /// Works only from Vista and above
+    /// </summary>
+    /// <returns></returns>
+    public static List<string> GetRemovableUsbDisks()
+    {
+      List<string> disks = new List<string>();
+
+      try
+      {
+        // browse all USB WMI physical disks
+        foreach (ManagementObject drive in
+          new ManagementObjectSearcher(
+            "select DeviceID, Model from Win32_DiskDrive where InterfaceType='USB' AND MediaType LIKE '%removable%' AND Model LIKE '%disk%'").
+            Get())
+        {
+          // associate physical disks with partitions
+          ManagementObject partition = new ManagementObjectSearcher(String.Format(
+            "associators of {{Win32_DiskDrive.DeviceID='{0}'}} where AssocClass = Win32_DiskDriveToDiskPartition",
+            drive["DeviceID"])).First();
+
+          if (partition != null)
+          {
+            // associate partitions with logical disks (drive letter volumes)
+            ManagementObject logical = new ManagementObjectSearcher(String.Format(
+              "associators of {{Win32_DiskPartition.DeviceID='{0}'}} where AssocClass = Win32_LogicalDiskToPartition",
+              partition["DeviceID"])).First();
+
+            if (logical != null)
+            {
+              disks.Add(logical["Name"].ToString());
+            }
+          }
+        }
+      }
+      catch (Exception ex)
+      {
+        Log.Error("Utils: GetUsbHardDisks Error: {0}", ex.Message);
+      }
+
+      return disks;
     }
 
     public static string GetTreePath(string filename, int depth, int step)
