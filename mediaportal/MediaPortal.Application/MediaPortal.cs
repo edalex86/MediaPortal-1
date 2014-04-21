@@ -1630,6 +1630,7 @@ public class MediaPortalApp : D3D, IRender
     {
       case PBT_APMSUSPEND:
         Log.Info("Main: Suspending operation");
+        PrepareSuspend();
         PluginManager.WndProc(ref msg);
         OnSuspend();
         break;
@@ -2307,13 +2308,20 @@ public class MediaPortalApp : D3D, IRender
   }
 
   /// <summary>
+  /// Prepare application for suspend, this is done before power events get passed to plugins
+  /// </summary>
+  private void PrepareSuspend()
+  {
+    // Make sure that plugins cannot open dialog when system is entering standby
+    _ignoreContextMenuAction = true;
+    GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.SUSPENDING;
+  }
+
+  /// <summary>
   /// 
-  /// </summary>  
+  /// </summary>
   private void OnSuspend()
   {
-    _ignoreContextMenuAction = true;
-    GUIGraphicsContext.CurrentState = GUIGraphicsContext.State.SUSPENDING; // this will close all open dialogs      
-
     // stop playback
     Log.Debug("Main: OnSuspend - stopping playback");
     if (GUIGraphicsContext.IsPlaying)
@@ -2322,6 +2330,8 @@ public class MediaPortalApp : D3D, IRender
       g_Player.Stop();
       while (GUIGraphicsContext.IsPlaying)
       {
+        // This could lead into OS putting system into sleep before MP completes OnSuspend().
+        // OS gives only 2 seconds time to application to react power events (>= Vista)
         Thread.Sleep(100);
       }
     }
@@ -2771,14 +2781,15 @@ public class MediaPortalApp : D3D, IRender
     InputDevices.Stop();
     AutoPlay.StopListening();
     PluginManager.Stop();
+    GUIWindowManager.Clear();
     GUIWaitCursor.Dispose();
-    GUIFontManager.ReleaseUnmanagedResources();
     GUIFontManager.Dispose();
     GUITextureManager.Dispose();
-    GUIWindowManager.Clear();
     GUILocalizeStrings.Dispose();
     TexturePacker.Cleanup();
     VolumeHandler.Dispose();
+
+    GUIFontManager.SetDeviceNull();
 
     if (_isWinScreenSaverInUse)
     {
@@ -3055,49 +3066,49 @@ public class MediaPortalApp : D3D, IRender
           {
             // 3D output either SBS or TAB
 
-            Surface old = GUIGraphicsContext.DX9Device.GetRenderTarget(0);
             Surface backbuffer = GUIGraphicsContext.DX9Device.GetBackBuffer(0, 0, BackBufferType.Mono);
 
             // create texture/surface for preparation for 3D output if they don't exist
 
-            if (GUIGraphicsContext.Auto3DTexture == null)
-              GUIGraphicsContext.Auto3DTexture = new Texture(GUIGraphicsContext.DX9Device,
+            Texture auto3DTexture = new Texture(GUIGraphicsContext.DX9Device,
                                                              backbuffer.Description.Width,
                                                              backbuffer.Description.Height, 0, Usage.RenderTarget,
                                                              backbuffer.Description.Format, Pool.Default);
 
-            if (GUIGraphicsContext.Auto3DSurface == null)
-              GUIGraphicsContext.Auto3DSurface = GUIGraphicsContext.Auto3DTexture.GetSurfaceLevel(0);
+            Surface auto3DSurface = auto3DTexture.GetSurfaceLevel(0);
 
             if (GUIGraphicsContext.Render3DMode == GUIGraphicsContext.eRender3DMode.SideBySide)
             {
               // left half (or right if switched)
 
               PlaneScene.RenderFor3DMode(GUIGraphicsContext.Switch3DSides ? GUIGraphicsContext.eRender3DModeHalf.SBSRight : GUIGraphicsContext.eRender3DModeHalf.SBSLeft,
-                              timePassed, backbuffer, GUIGraphicsContext.Auto3DSurface,
+                              timePassed, backbuffer, auto3DSurface,
                               new Rectangle(0, 0, backbuffer.Description.Width / 2, backbuffer.Description.Height));
 
               // right half (or right if switched)
 
               PlaneScene.RenderFor3DMode(GUIGraphicsContext.Switch3DSides ? GUIGraphicsContext.eRender3DModeHalf.SBSLeft : GUIGraphicsContext.eRender3DModeHalf.SBSRight,
-                              timePassed, backbuffer, GUIGraphicsContext.Auto3DSurface,
+                              timePassed, backbuffer, auto3DSurface,
                               new Rectangle(backbuffer.Description.Width / 2, 0, backbuffer.Description.Width / 2, backbuffer.Description.Height));
             }
             else
             {
               // upper half (or lower if switched)
               PlaneScene.RenderFor3DMode(GUIGraphicsContext.Switch3DSides ? GUIGraphicsContext.eRender3DModeHalf.TABBottom : GUIGraphicsContext.eRender3DModeHalf.TABTop, 
-                              timePassed, backbuffer, GUIGraphicsContext.Auto3DSurface,
+                              timePassed, backbuffer, auto3DSurface,
                               new Rectangle(0, 0, backbuffer.Description.Width, backbuffer.Description.Height/2));
 
               // lower half (or upper if switched)
               PlaneScene.RenderFor3DMode(GUIGraphicsContext.Switch3DSides ? GUIGraphicsContext.eRender3DModeHalf.TABTop : GUIGraphicsContext.eRender3DModeHalf.TABBottom, 
-                              timePassed, backbuffer, GUIGraphicsContext.Auto3DSurface,
+                              timePassed, backbuffer, auto3DSurface,
                               new Rectangle(0, backbuffer.Description.Height/2, backbuffer.Description.Width, backbuffer.Description.Height/2));
             }
 
             GUIGraphicsContext.DX9Device.Present();
             backbuffer.Dispose();
+
+            auto3DSurface.Dispose();
+            auto3DTexture.Dispose();
           }
         }
       }
